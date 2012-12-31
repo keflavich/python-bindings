@@ -1,7 +1,7 @@
 import subprocess
-import status
 import shlex
 import os
+import numpy as np
 
 def _runcmd(cmd):
     """
@@ -215,9 +215,9 @@ Note that most output files can be disabled by setting the filename to "none".
 
 def _build_index_args(**kwargs):
     argkeys = {'sort_column':'S', 'scale_number':'P', 'nside':'N',
-            'min_quad_size':,'l', 'max_quad_size':,'u',
+            'min_quad_size':'l', 'max_quad_size':'u',
             'reverse_sortorder':'f', 'healpix_nside':'U', 'big_healpix':'H',
-            'big_healpix_nside','s', 'margin':'m', 'sweeps':'n',
+            'big_healpix_nside':'s', 'margin':'m', 'sweeps':'n',
             'dedup_radius':'r', 'jitter_arcsec':'j', 'dimquads':'d',
             'passes':'p', 'reuse_times':'R', 'max_reuses':'L',
             'scan_catalog':'E', 'unique_id':'I', 'in_memory':'M',
@@ -253,8 +253,7 @@ def _build_index_args(**kwargs):
 
 
 
-data_path = build_index_path.split()[0]+"/data/"
-def build_index(infile, outfile=None, index_dir=None, **kwargs):
+def build_index(infile, outfile=None, index_dir=None, debug=False, **kwargs):
     """
 Usage: build-index
       (
@@ -302,10 +301,11 @@ Usage: build-index
     """        
     args = _build_index_args(**kwargs)
 
-    cmd = "build_index "
+    build_index = os.popen('which build-index').read()
+    cmd = "%s -i %s " % (build_index,infile)
 
     outdir = _get_index_dir()
-    if outfile is None:
+    if outfile is not None:
         cmd += "-o %s " % (outdir+outfile)
     else:
         if "P" in args:
@@ -323,6 +323,9 @@ Usage: build-index
         elif val is not None:
             cmd += "-%s %s " % (key,val)
 
+    if debug:
+        print cmd
+
     return _runcmd(cmd)
 
 def _get_index_dir():
@@ -331,5 +334,24 @@ def _get_index_dir():
     astrometry.net build indices
     """
     build_index_path = os.path.split(os.popen('which build-index').read().strip())[0]
-    data_path = build_index_path.split()[0]+"/data/"
+    data_path = os.path.split(build_index_path)[0]+"/data/"
+    if not os.access(data_path,os.W_OK):
+        raise IOError("Permissions in output directory %s do not allow writing" % data_path)
     return data_path
+
+
+def get_closest_preset(fieldsize):
+    """
+    Given a field size in arcminutes, return the preset with the closest field
+    size
+    """
+    # from build-index-main.c
+    scales = [0.35, 0.5, 0.7, 1., 1.4,
+              2., 2.8, 4., 5.6, 8., 11., 16., 22., 30., 42., 60., 85.,
+              120., 170., 240., 340., 480., 680., 1000., 1400., 2000. ]
+    scale_numbers = [x-5 for x in range(len(scales))]
+
+    closest_fieldsize = np.argmin(np.abs(np.array(scales)-fieldsize))
+    closest_scale = scale_numbers[closest_fieldsize]
+    return closest_scale
+
